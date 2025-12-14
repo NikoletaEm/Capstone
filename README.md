@@ -96,10 +96,12 @@ To run the app locally, the .rds files in the ShinyApplication/ folder must be d
 -  The borough shows signs of a two-speed housing market
 
 ## Author
-
-Nikoleta Emanouilidi
-Master’s Capstone Project – Data Science
-Staten Island, NY
+  
+  Nikoleta Emanouilidi
+  
+  Master’s Capstone Project – Data Science
+  
+  Staten Island, NY
 
 **If you’re here as a:**
 
