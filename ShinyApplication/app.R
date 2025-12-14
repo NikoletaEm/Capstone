@@ -1,19 +1,23 @@
-
 library(shiny)
 library(dplyr)
 library(plotly)
 library(DT)
 library(scales)
 
+# ------------------------------------------------------------------
+# DATA LOADING NOTE
+#
+# The datasets loaded below are preprocessed and stored as .rds files
+# to improve performance and ensure consistent results in the Shiny app.
+#
+# These files were generated from publicly available raw data using
+# documented cleaning and feature-engineering scripts included elsewhere
+# in the project and can be regenerated if needed.
+# ------------------------------------------------------------------
 
 combined_nta <- readRDS("combined_nta.rds")
 combined_neighborhood <- readRDS("combined_neighborhood.rds")
 schools_mapped <- readRDS("schools_mapped.rds")
-
-forecast_year <- 2026
-
-
-# UI
 
 ui <- fluidPage(
   
@@ -28,7 +32,8 @@ ui <- fluidPage(
         choices = c(
           "📝 Take the NTA Preference Quiz" = "quiz",
           "📊 View All NTAs (Forecasted Prices)" = "all"
-        )
+        ),
+        selected = "quiz"
       ),
       
       conditionalPanel(
@@ -36,48 +41,59 @@ ui <- fluidPage(
         
         hr(),
         h4("💸 Budget (Forecasted)"),
-        radioButtons("budget", NULL, choices = c(
-          "Lower-Priced: Under $650K" = "low",
-          "Mid-Priced: $650K – $835K" = "mid",
-          "Upper-Priced: Over $835K" = "high",
-          "I don't have a budget" = "none"
-        )),
+        radioButtons(
+          "budget", NULL,
+          choices = c(
+            "Lower-Priced: Under $650K" = "low",
+            "Mid-Priced: $650K – $835K" = "mid",
+            "Upper-Priced: Over $835K" = "high",
+            "I don't have a budget" = "none"
+          ),
+          selected = "none"
+        ),
         
         hr(),
         h4("🥇 Interested in Top-Ranked Schools?"),
-        radioButtons("schools", NULL, choices = c(
-          "Yes" = "yes",
-          "No" = "no",
-          "I don't care" = "na"
-        )),
+        radioButtons(
+          "schools", NULL,
+          choices = c("Yes" = "yes", "No" = "no", "I don't care" = "na"),
+          selected = "na"
+        ),
         
         hr(),
         h4("🏠 Home Style Preference"),
-        radioButtons("house_age_pref", NULL, choices = c(
-          "More modern neighborhoods (mostly built after 1970)" = "new",
-          "More historic neighborhoods (mostly built before 1970)" = "old",
-          "I don't have a preference" = "na"
-        )),
+        radioButtons(
+          "house_age_pref", NULL,
+          choices = c(
+            "More modern neighborhoods (mostly built after 1970)" = "new",
+            "More historic neighborhoods (mostly built before 1970)" = "old",
+            "I don't have a preference" = "na"
+          ),
+          selected = "na"
+        ),
         
         hr(),
         h4("🌇 Preferred Location"),
-        radioButtons("location", NULL, choices = c(
-          "Across from New Jersey" = "nj",
-          "Across from Brooklyn" = "bk",
-          "I don't mind" = "na"
-        )),
+        radioButtons(
+          "location", NULL,
+          choices = c(
+            "Across from New Jersey" = "nj",
+            "Across from Brooklyn" = "bk",
+            "I don't mind" = "na"
+          ),
+          selected = "na"
+        ),
         
         hr(),
         h4("🚂 Train Access"),
-        radioButtons("train", NULL, choices = c(
-          "Yes" = "yes",
-          "No" = "no",
-          "I don't care" = "na"
-        )),
+        radioButtons(
+          "train", NULL,
+          choices = c("Yes" = "yes", "No" = "no", "I don't care" = "na"),
+          selected = "na"
+        ),
         
         hr(),
-        actionButton("run_quiz", "🔍 Show My NTA Matches", class = "btn-primary"),
-        actionButton("reset_quiz", "🧹 Reset Quiz", class = "btn-danger")
+        actionButton("run_quiz", "🔍 Show My NTA Matches", class = "btn-primary")
       ),
       
       hr(),
@@ -111,29 +127,27 @@ ui <- fluidPage(
 )
 
 
-# SERVER
-
 server <- function(input, output, session) {
   
   forecast_year <- 2027
-  cleared <- reactiveVal(FALSE)
   
-  # QUIZ FILTER
+
   quiz_filtered <- eventReactive(input$run_quiz, {
-    
-    cleared(FALSE)
     
     df <- combined_nta %>% filter(year == forecast_year)
     
     # Budget
-    if (input$budget == "low")  df <- df %>% filter(mean_price < 650000)
-    if (input$budget == "mid")  df <- df %>% filter(mean_price >= 650000 & mean_price <= 835000)
-    if (input$budget == "high") df <- df %>% filter(mean_price > 835000)
+    if (input$budget == "low")
+      df <- df %>% filter(mean_price < 650000)
+    if (input$budget == "mid")
+      df <- df %>% filter(mean_price >= 650000 & mean_price <= 835000)
+    if (input$budget == "high")
+      df <- df %>% filter(mean_price > 835000)
     
     # Schools
     if ("top_school" %in% colnames(df)) {
-      if (input$schools == "yes") df <- df %>% filter(top_school == TRUE)
-      if (input$schools == "no")  df <- df %>% filter(top_school == FALSE)
+      if (input$schools == "yes") df <- df %>% filter(top_school)
+      if (input$schools == "no")  df <- df %>% filter(!top_school)
     }
     
     # House Age
@@ -143,40 +157,20 @@ server <- function(input, output, session) {
     }
     
     # Location
-    if (input$location == "nj") df <- df %>% filter(near_nj == TRUE)
-    if (input$location == "bk") df <- df %>% filter(near_brooklyn == TRUE)
+    if (input$location == "nj") df <- df %>% filter(near_nj)
+    if (input$location == "bk") df <- df %>% filter(near_brooklyn)
     
     # Train
-    if (input$train == "yes") df <- df %>% filter(train_access == TRUE)
-    if (input$train == "no")  df <- df %>% filter(train_access == FALSE)
+    if (input$train == "yes") df <- df %>% filter(train_access)
+    if (input$train == "no")  df <- df %>% filter(!train_access)
     
     df
   })
   
-  # RESET LOGIC
-  observeEvent(input$reset_quiz, {
-    
-    updateRadioButtons(session, "budget", selected = character(0))
-    updateRadioButtons(session, "schools", selected = character(0))
-    updateRadioButtons(session, "house_age_pref", selected = character(0))
-    updateRadioButtons(session, "location", selected = character(0))
-    updateRadioButtons(session, "train", selected = character(0))
-    
-    proxy <- dataTableProxy("quiz_results")
-    selectRows(proxy, NULL)
-    
-    cleared(TRUE)
-  })
-  
-  # OUTPUT TABLE
+
   output$quiz_results <- renderDT({
     
-    if (cleared()) {
-      return(datatable(
-        data.frame(Message = "🔄 Quiz reset. Choose new preferences."),
-        options = list(dom = "t")
-      ))
-    }
+    req(input$run_quiz)  
     
     df <- quiz_filtered()
     
@@ -193,32 +187,30 @@ server <- function(input, output, session) {
       datatable(selection = "single", options = list(pageLength = 10))
   })
   
-  # SELECTED NTA
+
   selected_nta <- reactive({
     s <- input$quiz_results_rows_selected
     req(s)
     quiz_filtered()$nta_name[s]
   })
   
-  # CLEARABLE OUTPUTS
   output$nta_detail_title <- renderText({
-    if (cleared()) return("")
     req(selected_nta())
     paste("📈 Price History for:", selected_nta())
   })
   
   output$nta_detail_trend <- renderPlotly({
-    if (cleared()) return(NULL)
     req(selected_nta())
     
     df <- combined_nta %>% filter(nta_name == selected_nta())
     
-    plot_ly(df, x = ~year, y = ~mean_price,
-            type = "scatter", mode = "lines+markers")
+    plot_ly(
+      df, x = ~year, y = ~mean_price,
+      type = "scatter", mode = "lines+markers"
+    )
   })
   
   output$nta_detail_table <- renderDT({
-    if (cleared()) return(NULL)
     req(selected_nta())
     
     combined_nta %>%
@@ -227,9 +219,9 @@ server <- function(input, output, session) {
       mutate(mean_price = dollar(round(mean_price))) %>%
       datatable(options = list(pageLength = 10))
   })
-  
-  # NEIGHBORHOOD TAB
+
   output$price_trend_plot <- renderPlotly({
+    
     df <- combined_neighborhood %>%
       filter(neighborhood == input$neighborhood)
     
@@ -238,6 +230,7 @@ server <- function(input, output, session) {
   })
   
   output$price_table <- renderDT({
+    
     combined_neighborhood %>%
       filter(neighborhood == input$neighborhood) %>%
       datatable(options = list(pageLength = 10))
@@ -246,3 +239,4 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+
