@@ -29,6 +29,7 @@ If Manhattan gets the headlines and Brooklyn gets the hype, this project asks:
 In short: this project goes beyond “prices go up” and shows where, why and how differently prices move across Staten Island.
 
 ## 📁 Repository Structure
+```
 Capstone/
 ├── DataUsed/
 │   └── Cleaned and raw datasets used in the analysis
@@ -45,6 +46,7 @@ Capstone/
 │   └── schools_mapped.rds
 │
 └── README.md
+```
 
 ## 📊 Fully Reproducible Analysis
 
