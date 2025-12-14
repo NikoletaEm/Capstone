@@ -8,16 +8,20 @@ The application provides an interactive interface for exploring forecasted housi
 ## File Descriptions
 
 app.R
-Main Shiny application file containing the UI and server logic.
+
+-  Main Shiny application file containing the UI and server logic.
 
 combined_nta.rds
-Preprocessed and forecasted housing price data at the NTA level.
+
+-  Preprocessed and forecasted housing price data at the NTA level.
 
 combined_neighborhood.rds
-Aggregated housing price data at the neighborhood level.
+
+-  Aggregated housing price data at the neighborhood level.
 
 schools_mapped.rds
-School quality indicators mapped to NTAs and used by the application filters.
+
+-  School quality indicators mapped to NTAs and used by the application filters.
 
 ## ▶️ How to Run the App Locally
 
@@ -39,7 +43,7 @@ schools_mapped.rds
 
 3.Open app.R in RStudio.
 
-4/Click Run App.
+Click Run App.
 
 The application reads the .rds files directly from the local folder. If any file is missing or renamed, the app will not launch correctly.
 
