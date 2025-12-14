@@ -1,0 +1,2431 @@
+---
+title: "data698_capstone"
+author: "Nikoleta Emanouilidi"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    toc: true
+  html_document:
+    toc: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Libraries
+```{r,message=FALSE,warning=FALSE}
+library(readr)
+library(rmdformats)
+library(prettydoc)
+library(shiny)
+library(FNN)
+library(bslib)
+library(formattable)
+library(ggplot2)
+library(tidyverse)
+library(shiny)
+library(leaflet)
+library(sf)
+library(DT)
+library(RColorBrewer)
+library(viridis)
+library(shiny)
+library(kableExtra)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(sf)
+library(scales)
+library(lubridate)
+library(purrr)
+library(rsample)
+library(xgboost)
+library(scales)
+library(sf) 
+library(janitor)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+library(Metrics)
+library(xgboost)
+library(dplyr)
+library(caret)
+library(corrplot)
+library(shiny)
+library(rsconnect)
+```
+
+
+```{r}
+# sales_2017 <- read_excel("2017_statenisland.xls", skip = 4, col_types = "text") %
+#  clean_names() %>%
+#  mutate(year = 2017)
+
+#sales_2018 <- read_excel("2018_statenisland.xlsx", skip = 4, col_types = "text")
+# %>%
+#  clean_names()%>%
+#  mutate(year = 2018)
+
+# sales_2019 <- read_excel("2019_statenisland.xlsx", skip = 4, col_types = "text") # %>%
+#  clean_names()%>%
+#  mutate(year = 2019)
+
+# sales_2020 <- read_excel("2020_staten_island.xlsx", skip = 6, col_types = "text") # %>%
+#  clean_names()%>%
+#  mutate(year = 2020)
+
+# sales_2021 <- read_excel("2021_staten_island.xlsx", skip = 6, col_types = "text") %>%
+# clean_names()%>%
+#  mutate(year = 2021)
+
+# sales_2022 <- read_excel("2022_staten_island.xlsx", skip = 6, col_types = "text") # %>%
+#  clean_names()%>%
+#  mutate(year = 2022)
+
+# sales_2023 <- read_excel("2023_staten_island.xlsx", skip = 6, col_types = "text") # %>%
+#  clean_names()%>%
+#  mutate(year = 2023)
+
+# sales_2024 <- read_excel("2024_staten_island.xlsx", skip = 6, col_types = "text") %>%
+#  clean_names()%>%
+#  mutate(year = 2024)
+
+# sales_2025 <- read_excel("sales_2025.xlsx", skip = 4, col_types = "text") %>%
+#  clean_names()%>%
+#  mutate(year = 2025)
+# ------------------------------------------------------------------
+# SALES DATA – REPRODUCIBILITY NOTE
+#
+# Original Staten Island sales files were provided as Excel workbooks
+# with metadata rows and formatting issues.
+#
+# These files were cleaned, standardized and exported to CSV format
+# to ensure consistency, lighter storage and reproducibility.
+#
+# The cleaned CSV files are hosted on GitHub and loaded directly below.
+# The original Excel-to-CSV cleaning process is documented directly above
+# ------------------------------------------------------------------
+```
+
+```{r,message=FALSE}
+sales_2017 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2017_statenisland.csv")
+
+sales_2018 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2018_statenisland.csv")
+
+sales_2019 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2019_statenisland.csv")
+
+sales_2020 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2020_staten_island.csv")
+
+sales_2021 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2021_staten_island.csv")
+
+sales_2022 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2022_staten_island.csv")
+
+sales_2023 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2023_staten_island.csv")
+
+sales_2024 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/2024_staten_island.csv")
+
+sales_2025 <- read_csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/main/DataUsed/sales_2025.csv")
+
+```
+
+```{r}
+si_sales_raw <- bind_rows(
+  sales_2017, sales_2018, sales_2019, sales_2020,
+  sales_2021, sales_2022, sales_2023, sales_2024, sales_2025)
+
+
+head(si_sales_raw)
+str(si_sales_raw)
+```
+
+
+```{r}
+# initial dataset clean
+si_sales_clean <- si_sales_raw %>%
+
+  mutate(
+    sale_price = as.numeric(sale_price),
+    residential_units = as.numeric(residential_units),
+    year_built = as.numeric(year_built)
+  ) %>%
+  
+  filter(!is.na(sale_price) & sale_price > 10000) %>%
+
+  filter(grepl("FAMILY DWELLING", building_class_category)) %>%
+  
+  select(
+    year,
+    neighborhood,
+    zip_code,
+    residential_units,
+    year_built,
+    sale_price,
+    land_square_feet
+  )
+
+head(si_sales_clean)
+str(si_sales_clean)
+
+summary(si_sales_clean)
+```
+
+```{r}
+# summary table of home sales by neighborhood and year
+si_neighborhood_summary <- si_sales_clean %>%
+  group_by(year, neighborhood) %>%
+  summarise(
+    avg_sale_price = mean(sale_price, na.rm = TRUE),
+    min_sale_price = min(sale_price, na.rm = TRUE),
+    max_sale_price = max(sale_price, na.rm = TRUE),
+    number_of_sales = n(),
+    .groups = 'drop' 
+  )
+head(si_neighborhood_summary)
+```
+
+
+```{r}
+## some eda on that 
+cat("--- Summary of the si_sales_clean dataset ---\n")
+summary(si_sales_clean)
+
+# Get the structure of the dataset to check data types.
+cat("\n--- Structure of the si_sales_clean dataset ---\n")
+str(si_sales_clean)
+
+## Note for later: we got 2 NAs at residential_units and 27 at year_built
+
+
+```
+
+```{r}
+
+# Plot 1: Distribution of Sale Prices
+# This histogram shows the frequency of sales at different price points.
+ggplot(si_sales_clean, aes(x = sale_price)) +
+  geom_histogram(bins = 50, fill = "purple", color = "black") +
+  scale_x_log10(labels = scales::dollar_format()) +
+  labs(
+    title = "Distribution of Staten Island Home Sale Prices (2017-2025)",
+    x = "Sale Price (Log Scale)",
+    y = "Number of Sales"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+
+# Plot 2: Median Sale Price Over Time
+# This line chart shows how the overall market has changed year over year.
+si_yearly_median <- si_sales_clean %>%
+  group_by(year) %>%
+  summarise(median_sale_price = median(sale_price, na.rm = TRUE))
+
+ggplot(si_yearly_median, aes(x = year, y = median_sale_price, group = 1)) +
+  geom_line(color = "navy", size = 1.5) +
+  geom_point(color = "navy", size = 3) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  labs(
+    title = "Median Home Sale Price in Staten Island (2017-2025)",
+    x = "Year",
+    y = "Median Sale Price"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Plot 3: Number of Sales Per Year
+# This bar chart shows the volume of sales activity over time.
+ggplot(si_neighborhood_summary, aes(x = year, y = number_of_sales)) +
+  stat_summary(fun = "sum", geom = "bar", fill = "steelblue") +
+  labs(
+    title = "Total Number of Residential Sales in Staten Island (2017-2025)",
+    x = "Year",
+    y = "Total Sales"
+  ) +
+  theme_minimal()
+
+```
+
+## Mapping of Staten Island sales
+```{r,warning=FALSE,message=FALSE}
+
+nta_map <- st_read("nynta2020_25c/nynta2020.shp")
+si_map <- nta_map %>%
+  filter(BoroName == "Staten Island")
+
+si_sales_clean <- si_sales_clean %>%
+  mutate(neighborhood_upper = toupper(trimws(neighborhood)))
+
+si_map <- si_map %>%
+  mutate(NTAName = if_else(NTAName == "Snug Harbor", "St. George-New Brighton", NTAName)) %>%
+    mutate(NTAName = if_else(NTAName == "Great Kills Park", "Great Kills-Eltingville", NTAName))%>%
+      mutate(NTAName = if_else(NTAName == "Miller Field", "New Dorp-Midland Beach", NTAName))
+    
+
+# df same as si_sales_clean but with the ntas 
+si_sales_mapped <- si_sales_clean %>%
+  mutate(
+    nta_name = case_when(
+      grepl("ARDEN HEIGHTS|ROSSVILLE|ROSSVILLE-CHARLESTON|ROSSVILLE-RICHMOND VALLEY", neighborhood_upper) ~ "Arden Heights-Rossville",
+      grepl("ARROCHAR|ARROCHAR-SHORE ACRES|DONGAN HILLS|DONGAN HILLS-COLONY|DONGAN HILLS-OLD TOWN|GRASMERE|SOUTH BEACH", neighborhood_upper) ~ "Grasmere-Arrochar-South Beach-Dongan Hills",
+      grepl("ANNADALE|HUGUENOT|PRINCES BAY|WOODROW|PLEASANT PLAINS", neighborhood_upper) ~ "Annadale-Huguenot-Prince's Bay-Woodrow",
+      grepl("BULLS HEAD|NEW SPRINGVILLE|TRAVIS|WILLOWBROOK|BLOOMFIELD", neighborhood_upper) ~ "New Springville-Willowbrook-Bulls Head-Travis",
+      grepl("CASTLETON CORNERS|WESTERLEIGH|CLOVE LAKES|SUNNYSIDE", neighborhood_upper) ~ "Westerleigh-Castleton Corners",
+      grepl("CONCORD|CONCORD-FOX HILLS|STAPLETON|STAPLETON-CLIFTON|TOMPKINSVILLE", neighborhood_upper) ~ "Tompkinsville-Stapleton-Clifton-Fox Hills",
+      grepl("ELTINGVILLE|GREAT KILLS|GREAT KILLS-BAY TERRACE", neighborhood_upper) ~ "Great Kills-Eltingville",
+      grepl("GRYMES HILL|SILVER LAKE|WEST NEW BRIGHTON|LIVINGSTON", neighborhood_upper) ~ "West New Brighton-Silver Lake-Grymes Hill",
+      grepl("EMERSON HILL|MANOR HEIGHTS|TODT HILL", neighborhood_upper) ~ "Todt Hill-Emerson Hill-Lighthouse Hill-Manor Heights",
+      grepl("PORT RICHMOND", neighborhood_upper) ~ "Port Richmond",
+      grepl("TOTTENVILLE", neighborhood_upper) ~ "Tottenville-Charleston",
+      grepl("OAKWOOD|OAKWOOD-BEACH|RICHMONDTOWN|RICHMONDTOWN-LIGHTHS HILL", neighborhood_upper) ~ "Oakwood-Richmondtown",
+      grepl("NEW DORP|MIDLAND BEACH|NEW DORP-BEACH|NEW DORP-HEIGHTS|GRANT CITY", neighborhood_upper) ~ "New Dorp-Midland Beach",
+      grepl("ROSEBANK", neighborhood_upper) ~ "Rosebank-Shore Acres-Park Hill",
+      grepl("MARINERS HARBOR|PORT IVORY", neighborhood_upper) ~ "Mariner's Harbor-Arlington-Graniteville",
+      grepl("NEW BRIGHTON", neighborhood_upper) ~ "St. George-New Brighton",
+      grepl("FRESH KILLS", neighborhood_upper) ~ "Freshkills Park (South)",
+      TRUE ~ "Other" # Catches any names that don't fit the rules above
+    )
+  )
+
+other_rows <- si_sales_mapped[si_sales_mapped$nta_name == "Other", ]
+nrow(other_rows)
+
+
+si_sales_mapped$land_square_feet <- as.numeric(si_sales_mapped$land_square_feet)
+
+si_sales_mapped <- si_sales_mapped %>%
+  mutate(year_built = na_if(year_built, 0))
+summary(si_sales_mapped)
+
+head(si_sales_mapped)
+str(si_sales_mapped)
+
+
+```
+
+```{r}
+neighborhood_prices <- si_sales_mapped %>% 
+  filter(nta_name != "Other") %>% 
+  group_by(nta_name) %>% 
+  summarise(overall_avg_price = mean(sale_price, na.rm = TRUE)) 
+
+si_map_prices <- left_join(si_map, neighborhood_prices, by = c("NTAName" = "nta_name"))
+
+# overall avg price per neighborhood
+get_clean_label <- function(name_vec) {
+  sapply(name_vec, function(name) {
+    if (is.na(name)) return(NA)
+    strsplit(name, "-")[[1]][1] |> trimws()
+  })
+}
+
+si_map_prices <- si_map_prices %>%
+  mutate(
+    label_name = get_clean_label(NTAName),
+    centroid = st_centroid(geometry),
+    label_color = if_else(overall_avg_price > 900000, "white", "black")
+  )
+
+ 
+heatmap<- ggplot(data = si_map_prices) +
+    geom_sf(aes(fill = overall_avg_price), color = "white", size = 0.3) +
+    
+    geom_sf_text(
+        aes(geometry = centroid, label = label_name, color = label_color),
+        size = 2,         
+        fontface = "bold",
+        alpha = 0.9
+    ) +
+    
+    scale_color_identity() +
+    scale_fill_viridis_c(
+        option = "mako",
+        direction = -1,
+        labels = scales::dollar_format(),
+        name = "Avg. Sale Price"
+    ) +
+    
+    labs(
+        title = "Where Are Homes Most Expensive in Staten Island?",
+        subtitle = "Southern neighborhoods consistently show higher prices (2017–2025)",
+        caption = "Labels shortened for readability"
+    ) +
+    
+    theme_void(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold", size = 20, hjust = 0.5),
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
+        plot.caption = element_text(size = 10, color = "gray40", hjust = 0.5),
+        legend.position = "right"
+    )
+
+heatmap
+```
+```{r}
+num_vars <- sapply(si_sales_mapped, is.numeric)
+num_data <- si_sales_mapped[ , num_vars]
+
+n_num <- ncol(num_data)
+
+par(mfrow = c(2, 3))  
+
+for (colname in names(num_data)) {
+  hist(num_data[[colname]],
+       main = paste("Histogram of", colname),
+       xlab = colname,
+       col = "purple",
+       breaks = 30)
+}
+
+
+
+# boxplots
+par(mfrow = c(2, 3))  
+
+for (colname in names(num_data)) {
+  boxplot(num_data[[colname]],
+          horizontal = TRUE,
+          main = paste("Boxplot of", colname),
+          xlab = colname,
+          col = "orange")
+}
+
+hist(num_data$sale_price)
+boxplot(num_data$sale_price)
+```
+```{r}
+heat_data <- si_sales_mapped %>%
+  mutate(
+    year_bin = cut(
+      year_built,
+      breaks = seq(1830, 2030, by = 10),
+      labels = paste0(seq(1830, 2020, by = 10), "-", seq(1840, 2030, by = 10)) 
+    )
+  ) %>%
+  group_by(nta_name, year_bin) %>%
+  summarise(avg_price = mean(sale_price, na.rm = TRUE), .groups = "drop")%>%
+  drop_na(year_bin)
+
+nta_order <- heat_data %>%
+  group_by(nta_name) %>%
+  summarise(avg = mean(avg_price, na.rm = TRUE)) %>%
+  arrange(desc(avg)) %>%
+  pull(nta_name)
+
+ggplot(heat_data, aes(x = year_bin, y = factor(nta_name, levels = nta_order), fill = avg_price)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(option = "plasma", labels = scales::dollar) +
+  labs(
+    x = "Decade Built",
+    y = "Neighborhood (NTA)",
+    fill = "Average Price",
+    title = "Average Sale Price by NTA and Decade Built"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45,size = 8, hjust = 1),
+    axis.text.y = element_text(size = 6)
+  )
+
+
+```
+
+## CPI
+
+```{r,warning=FALSE,message=FALSE}
+cpi_all_items_raw <- read_csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/CPI_allcostumer.csv")
+
+colnames(cpi_all_items_raw) <- c("date", "cpi_value")
+
+cpi2025 <- read_csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/cpi_2025.csv")
+colnames(cpi2025) <- c("date", "cpi_value")
+
+cpi_all_items_raw <- bind_rows(cpi_all_items_raw, cpi2025)
+
+head(cpi_all_items_raw)
+```
+
+```{r}
+cpi_all_items <- cpi_all_items_raw %>%
+  mutate(
+    date = as.Date(date),
+    year = as.numeric(format(date, "%Y"))
+  ) %>%
+  group_by(year) %>%
+  summarise(all_items_annual_avg_cpi = mean(cpi_value, na.rm = TRUE)) %>%
+  mutate(
+    previous_year_cpi = lag(all_items_annual_avg_cpi),
+    all_items_inflation_pct = ((all_items_annual_avg_cpi - previous_year_cpi) / previous_year_cpi) * 100,
+    all_items_inflation_pct = ifelse(year == 2017, 2.1, all_items_inflation_pct)
+  ) %>%
+  select(year, all_items_annual_avg_cpi, all_items_inflation_pct)
+
+
+```
+
+```{r}
+cpi_vs_home <- si_yearly_median %>%
+  left_join(cpi_all_items, by = "year")
+
+p_home <- ggplot(cpi_vs_home, aes(x = year, y = median_sale_price)) +
+  geom_line(color = "darkblue", linewidth = 1.2) +
+  geom_point(color = "darkblue", size = 3) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  labs(
+    title = "Staten Island Median Home Prices",
+    x = "Year",
+    y = "Median Sale Price (USD)"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+p_cpi <- ggplot(cpi_vs_home, aes(x = year, y = all_items_annual_avg_cpi)) +
+  geom_line(color = "firebrick", linewidth = 1.2, linetype = "dashed") +
+  geom_point(color = "firebrick", size = 3) +
+  labs(
+    title = "Consumer Price Index (All Items)",
+    x = "Year",
+    y = "CPI Index"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+p_home + p_cpi +
+  plot_annotation(
+    title = "Housing Prices and Inflation Trends (2017–2025)",
+    theme = theme(
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
+    )
+  )
+
+
+```
+
+
+```{r}
+
+mortgage_rates_raw <- read.csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/mortgage_rt.csv")
+
+
+colnames(mortgage_rates_raw) <- c("date", "mortgage_rt")
+
+
+
+mort2025<- read.csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/mortgage_rt_2025.csv")
+colnames(mort2025) <- c("date", "mortgage_rt")
+mortgage_rates_raw <- bind_rows(mortgage_rates_raw, mort2025)
+
+head(mortgage_rates_raw)
+```
+
+## Mortgage rate
+
+```{r}
+mortgage_rates_yearly <- mortgage_rates_raw %>%
+  mutate(
+    date = as.Date(date),
+    year = year(date) 
+  ) %>%
+  group_by(year) %>%
+  summarise(
+    avg_mortgage_rate = mean(mortgage_rt, na.rm = TRUE))
+
+print(mortgage_rates_yearly)
+
+```
+
+```{r}
+
+economic_factors <- full_join(cpi_all_items, mortgage_rates_yearly, by = "year")
+
+
+## Normalization to index for cpi
+economic_factors <- economic_factors %>%
+  arrange(year) %>%
+  mutate(
+    all_items_annual_avg_cpi =
+      (all_items_annual_avg_cpi / first(all_items_annual_avg_cpi)) * 100 ) %>%
+  select(-all_items_inflation_pct)
+
+
+
+print(economic_factors)
+```
+
+
+
+
+```{r}
+comparison_data <- full_join(si_yearly_median, cpi_all_items, by = "year") %>%
+  left_join(mortgage_rates_yearly, by = "year") %>%
+  mutate(price_bar = 0.7)
+
+
+ggplot(comparison_data, aes(x = as.factor(year))) +
+
+  
+  geom_col(aes(y = price_bar, fill = "Median Sale Price"),
+           alpha = 0.6, width = 0.6) +
+
+ 
+  geom_text(
+    aes(y = price_bar,
+        label = scales::dollar(median_sale_price)),
+    vjust = -0.6,
+    size = 3.5,
+    fontface = "bold"
+  ) +
+
+
+  geom_line(aes(y = all_items_inflation_pct,
+                color = "Overall Inflation (CPI)"),
+            linewidth = 1.3, group = 1) +
+  geom_point(aes(y = all_items_inflation_pct,
+                 color = "Overall Inflation (CPI)"),
+             size = 3) +
+
+
+  geom_line(aes(y = avg_mortgage_rate,
+                color = "30-Year Mortgage Rate"),
+            linewidth = 1.3, linetype = "dashed", group = 1) +
+  geom_point(aes(y = avg_mortgage_rate,
+                 color = "30-Year Mortgage Rate"),
+             size = 3) +
+
+  scale_y_continuous(
+    name = "Inflation & Mortgage Rates (%)",
+    expand = expansion(mult = c(0.05, 0.25))
+  ) +
+
+  scale_fill_manual(
+    values = c("Median Sale Price" = "#FF8C66"),
+    name = ""
+  ) +
+  scale_color_manual(
+    values = c(
+      "Overall Inflation (CPI)" = "#1F78B4",
+      "30-Year Mortgage Rate"  = "#33A02C"
+    ),
+    name = ""
+  ) +
+
+  labs(
+    title = "Housing Prices (Labeled) with Inflation and Mortgage Rate Trends",
+    subtitle = "Bars show annual median prices as labels-lines show macroeconomic rates",
+    x = "Year"
+  ) +
+
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+
+```
+
+## Population growth/decay of NYC and SI
+
+```{r}
+
+ny_population <- read_csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/nypopulation_fred.csv")
+
+si_population <- read_csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/si_population.csv")
+new_row <- tibble(
+  year = 2025,
+  population = 489345
+)
+
+
+si_population <- bind_rows(si_population, new_row)
+## population in 2025 is estimated
+
+print(ny_population)
+print(si_population)
+```
+
+## Population of ntas
+
+```{r}
+
+nta_pop <- data.frame(
+  nta_name = c(
+    "St. George-New Brighton",
+    "Tompkinsville-Stapleton-Clifton-Fox Hills",
+    "Rosebank-Shore Acres-Park Hill",
+    "West New Brighton-Silver Lake-Grymes Hill",
+    "Westerleigh-Castleton Corners",
+    "Port Richmond",
+    "Mariner's Harbor-Arlington-Graniteville",
+    "Grasmere-Arrochar-South Beach-Dongan Hills",
+    "New Dorp-Midland Beach",
+    "Todt Hill-Emerson Hill-Lighthouse Hill-Manor Heights",
+    "New Springville-Willowbrook-Bulls Head-Travis",
+    "Oakwood-Richmondtown",
+    "Great Kills-Eltingville",
+    "Arden Heights-Rossville",
+    "Annadale-Huguenot-Prince's Bay-Woodrow",
+    "Tottenville-Charleston"
+  ),
+  population = c(
+    20225,
+    17596,
+    22705,
+    35491,
+    31582,
+    20896,
+    32812,
+    36672,
+    29303,
+    33699,
+    42458,
+    20418,
+    57572,
+    31491,
+    42360,
+    16845
+  )
+)
+
+```
+
+
+```{r}
+## SI
+si_population <- si_population %>%
+  rename(
+    si_population = population
+  )
+
+
+si_population <- si_population %>%
+  mutate(
+    yoy_growth_percentage_si = ((si_population - lag(si_population)) / lag(si_population)) * 100
+  ) %>%
+  filter(year > 2016) 
+print(si_population)
+
+
+```
+
+
+
+## Crime data 
+
+```{r}
+crime_data <- read.csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/NYPD_Arrests_Data__Historic__20250927.csv")
+crime_points <- st_as_sf(crime_data, 
+                         coords = c("Longitude", "Latitude"), 
+                         crs = 4326)  
+
+crime_points <- st_transform(crime_points, st_crs(si_map))
+
+crime_with_nta <- st_join(crime_points, si_map, join = st_within)
+```
+
+```{r}
+crime_clean <- crime_with_nta %>%
+  mutate(
+    year = year(mdy(ARREST_DATE))   
+  ) %>%
+  select(
+    year,
+    OFNS_DESC,    
+    NTAName       
+  )
+
+head(crime_clean)
+
+str(crime_clean)
+
+```
+```{r}
+crime_data_2025 <- read.csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/crimedata_2025.csv")
+crime_points_25 <- st_as_sf(crime_data_2025, 
+                         coords = c("Longitude", "Latitude"), 
+                         crs = 4326)  
+
+crime_points_25 <- st_transform(crime_points_25, st_crs(si_map))
+
+crime_with_nta_25 <- st_join(crime_points_25, si_map, join = st_within)
+
+crime_clean_25 <- crime_with_nta_25 %>%
+  mutate(
+    year = year(mdy(CMPLNT_FR_DT))   
+  ) %>%
+  select(
+    year,
+    OFNS_DESC,    
+    NTAName       
+  )
+
+head(crime_clean_25)
+
+crime_clean_25<-crime_clean_25 %>%
+  drop_na()
+crime_clean <- bind_rows(crime_clean, crime_clean_25)
+crime_clean
+```
+
+## Crime rate per nta
+
+```{r}
+crime_counts_by_nta_year <- crime_clean %>%
+  group_by(year, NTAName) %>%
+  summarise(total_incidents = n(), .groups = "drop") %>%
+  as.data.frame()  
+
+si_map_counts <- si_map %>%
+  left_join(crime_counts_by_nta_year, by = c("NTAName" = "NTAName"))%>%
+  filter(!is.na(total_incidents)) 
+
+crime_totals_by_nta <- crime_counts_by_nta_year %>%
+  group_by(NTAName) %>%
+  summarise(total_incidents_all_years = sum(total_incidents, na.rm = TRUE), .groups = "drop")
+
+# crime rate per 1,000 residents
+nta_pop <- nta_pop %>%
+  rename(NTAName = nta_name)
+nta_pop <- nta_pop %>%
+  mutate(population = as.numeric(gsub(",", "", population)))
+crime_with_pop <- crime_totals_by_nta %>%
+  left_join(nta_pop, by = "NTAName") %>%
+  mutate(crime_rate_per_1000 = (total_incidents_all_years / population) * 1000)
+
+
+crime_with_pop <- crime_with_pop %>%
+    drop_na()
+
+
+crime_with_pop <- crime_with_pop %>%
+  rename(nta_name = NTAName)
+
+head(crime_with_pop)
+#### Higher numbers = relatively more crime incidents per resident (higher crime density).
+#### Lower numbers = relatively fewer incidents per resident (lower crime density).
+```
+
+
+```{r}
+ggplot(si_map_counts) +
+  geom_sf(aes(fill = total_incidents), color = "white", size = 0.2) +
+  
+  scale_fill_viridis_c(option = "viridis") +
+  facet_wrap(~year, ncol = 3) +
+  labs(
+    title = "Crime Incidents per NTA",
+    fill = "Incidents"
+  ) +
+  theme_void(base_size = 19) +  
+  theme(
+     legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12), 
+    strip.text = element_text(size = 10),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 8, face = "bold")
+  )
+  
+
+```
+
+```{r}
+top_10_nta <- crime_counts_by_nta_year %>%
+  group_by(NTAName) %>%
+  summarise(total_incidents_all_years = sum(total_incidents)) %>%
+  slice_max(order_by = total_incidents_all_years, n = 10)
+
+
+top_10_data <- crime_counts_by_nta_year %>%
+  filter(NTAName %in% top_10_nta$NTAName)
+
+ggplot(top_10_data, aes(x = reorder(NTAName, total_incidents), y = total_incidents, fill = NTAName)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  facet_wrap(~year, ncol = 3) +
+  labs(
+    title = "Top 10 Neighborhoods by Crime Incidents",
+    x = "Neighborhood (NTA)",
+    y = "Total Incidents"
+  ) +
+  theme(
+    legend.position = "none",
+    axis.text.y = element_text(size = 7.2) 
+  )
+
+
+```
+
+## Average house price per year and nta
+
+```{r}
+# Average house price per year and nta
+avg_nta_house_prices <- si_sales_mapped %>%
+  dplyr::group_by(year, nta_name)  %>%
+  summarise(
+    avg_sale_price = mean(sale_price, na.rm = TRUE),
+    .groups = "drop" )
+
+
+print(avg_nta_house_prices)
+
+
+```
+
+
+```{r}
+
+
+si_map_prices2 <- si_map %>%
+  left_join(avg_nta_house_prices, by = c("NTAName" = "nta_name"))
+
+years <- 2017:2025
+
+
+all_year_plots <- list()
+
+for (yr in years) {
+  
+  map_prices_year <- si_map_prices2 %>% filter(year == yr)
+  map_incidents_year <- si_map_counts %>% filter(year == yr)
+
+
+  p1 <- ggplot(map_prices_year) +
+    geom_sf(aes(fill = avg_sale_price), color = "white", size = 0.3) +
+    scale_fill_viridis_c(
+      option = "magma", 
+      na.value = "grey80",
+      labels = scales::label_dollar(scale = 1e-3, suffix = "K"),  
+      breaks = c(400000, 600000, 800000, 1000000)         
+    ) +
+    labs(title = paste("Average House Price by NTA (", yr, ")", sep = ""),
+         fill = "Avg Price") +
+    theme_void() +
+    theme(
+      legend.position = "bottom",
+      legend.key.height = unit(0.3, "cm"),
+      legend.key.width = unit(1.2, "cm"),
+      legend.title = element_text(size = 9),
+      legend.text = element_text(size = 8)
+    )
+
+
+  p2 <- ggplot(map_incidents_year) +
+    geom_sf(aes(fill = total_incidents), color = "white", size = 0.3) +
+    scale_fill_viridis_c(
+      option = "viridis",
+      trans = "log",
+      na.value = "grey80",
+      labels = scales::label_comma(),                        
+      breaks = c(1, 10, 50, 200, 500, 1000)          
+    ) +
+    labs(title = paste("Incidents by NTA (", yr, ")", sep = ""),
+         fill = "Incidents") +
+    theme_void() +
+    theme(
+      legend.position = "bottom",
+      legend.key.height = unit(0.3, "cm"),
+      legend.key.width = unit(1.2, "cm"),
+      legend.title = element_text(size = 9),
+      legend.text = element_text(size = 8)
+    )
+
+
+  combined <- p1 + p2
+
+
+  all_year_plots[[as.character(yr)]] <- combined
+}
+
+big_combined_plot <- wrap_plots(all_year_plots, ncol = 2)
+
+```
+
+## Schools
+
+```{r}
+schools <- read_csv("https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/staten_island_schoolss.csv")
+```
+
+```{r}
+merged_data <- schools %>%
+  left_join(neighborhood_prices, by = c("Nta_name" = "nta_name"))
+
+ggplot(merged_data, aes(x = overall_avg_price, y = Ranking)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Average Housing Price", y = "School Ranking (1–10)",
+       title = "Relationship between Housing Prices and School Rankings")
+
+```
+
+## Average school ranking per nta
+
+```{r}
+avg_school_rankings_by_nta <- schools %>%
+  group_by(Nta_name) %>%
+  summarise(avg_school_ranking = mean(Ranking, na.rm = TRUE), .groups = "drop")
+
+avg_school_rankings_by_nta <- avg_school_rankings_by_nta %>% 
+  rename(nta_name = Nta_name)
+
+avg_school_rankings_by_nta
+
+schools <- schools %>%
+  rename(nta_name = Nta_name)
+
+```
+
+```{r}
+totalincidents_per_nta <- crime_clean %>%
+  group_by(NTAName) %>%
+  summarise(total_incidents = n())
+
+crime_housingprice_schools <- merged_data %>%
+  left_join(totalincidents_per_nta, by = c("Nta_name" = "NTAName"))
+
+```
+
+
+```{r}
+cor(crime_housingprice_schools$overall_avg_price, crime_housingprice_schools$Ranking, use = "complete.obs")
+cor(crime_housingprice_schools$overall_avg_price, crime_housingprice_schools$total_incidents, use = "complete.obs")
+
+
+crime2 <- ggplot(
+  crime_housingprice_schools,
+  aes(
+    x = Ranking,
+    y = overall_avg_price,
+    color = total_incidents
+  )
+) +
+  geom_point(size = 4, alpha = 0.85) +
+  scale_color_viridis_c(option = "plasma") +
+  labs(
+    x = "School Ranking",
+    y = "Average Housing Price",
+    color = "Crime Incidents",
+    title = "Joint Influence of School Quality and Crime on Housing Prices",
+    subtitle = "Average housing prices by school ranking, colored by crime incidents"
+  ) +
+  theme_minimal(base_size = 16) +
+  theme(
+    plot.title = element_text(
+      size = 15,
+      face = "bold",
+      hjust = 0.5
+    ),
+    plot.subtitle = element_text(
+      size = 10,
+      hjust = 0.5
+    ),
+    axis.title = element_text(
+      size = 10,
+      face = "bold"
+    ),
+    axis.text = element_text(
+      size = 10
+    ),
+    legend.title = element_text(
+      size = 10,
+      face = "bold"
+    ),
+    legend.text = element_text(
+      size = 10
+    ),
+    legend.position = "right"
+  )
+
+crime2
+```
+
+```{r}
+## Do neighborhoods with higher-ranked schools tend to have higher housing prices?
+
+crime_housingprice_schools <- crime_housingprice_schools %>%
+  sf::st_drop_geometry() %>%   
+  mutate(
+    rank_group = ifelse(Ranking >= 8, "High-Rank Schools", "Low-Rank Schools")
+  )
+
+
+price_by_rank <- crime_housingprice_schools %>%
+  group_by(rank_group) %>%
+  summarise(
+    overall_avg_price = mean(overall_avg_price, na.rm = TRUE),
+    n = n()
+  )
+
+# Plot 1: Boxplot
+p1 <- ggplot(crime_housingprice_schools, 
+             aes(x = rank_group, y = overall_avg_price, fill = rank_group)) +
+  geom_boxplot(alpha = 0.75) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "School Rank Group",
+    y = "Average Housing Price (USD)",
+    title = "Do Higher-Ranked Schools Correspond to Higher Housing Prices?",
+    subtitle = "Distribution of Housing Prices by School Rank"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Plot 2: Bar Chart
+p2 <- ggplot(price_by_rank, 
+             aes(x = rank_group, y = overall_avg_price, fill = rank_group)) +
+  geom_col(alpha = 0.75) +
+  geom_text(aes(label = scales::dollar(overall_avg_price)),
+            vjust = -0.5, size = 4.2) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "School Rank Group",
+    y = "Mean Housing Price (USD)",
+    title = "Do Higher-Ranked Schools Correspond to Higher Housing Prices?",
+    subtitle ="Mean Housing Price by School Rank Group"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+plt <- p1 + p2
+
+
+
+plt
+```
+
+
+
+
+## DOB Permits
+
+```{r}
+# The original Department of Buildings (DOB) permits file is really large and
+# unnecessary for reproducing the results of this project.
+# To keep the repository lightweight and fully reproducible, the
+# analysis directly loads a cleaned permits dataset from GitHub.
+#
+# The commented code below documents the full cleaning process used
+# to generate the cleaned permits file, including variable selection,
+# date parsing and filtering to the 2017–2025 study period.
+
+# permits_raw <- read.csv("DOB_Permits_Staten_Island_20251006 (1).csv")
+
+# permits_clean <- permits_raw %>%
+#  rename(
+#    permit_issued_date = Issuance.Date,  
+#    lon = LONGITUDE,                   
+#    lat = LATITUDE
+#  ) %>%
+#  select(permit_issued_date, lon, lat) %>%
+#  filter(!is.na(lon) & !is.na(lat)) 
+
+# permits_clean <- permits_clean %>%
+#  mutate(
+#    permit_issued_date = mdy(permit_issued_date),
+#    year = year(permit_issued_date)
+#  ) %>%
+#  filter(year >= 2017, year <= 2025)
+
+# write.csv(
+#  permits_clean,
+#  "permits_clean_staten_island_2017_2025.csv",
+#  row.names = FALSE
+# )
+# - - - - - - - - - - - - - - - - - - - - - 
+
+permits_clean <- read.csv(
+  "https://raw.githubusercontent.com/NikoletaEm/Capstone/refs/heads/main/DataUsed/permits_clean_staten_island_2017_2025.csv"
+)
+
+
+permits_sf <- st_as_sf(
+  permits_clean,
+  coords = c("lon", "lat"),
+  crs = 4326,       # WGS84 (latitude/longitude)
+  remove = FALSE
+)
+
+
+si_map <- st_transform(si_map, 4326)
+
+
+permits_with_nta <- st_join(permits_sf, si_map, join = st_within)
+
+permits_summary <- permits_with_nta %>%
+  st_drop_geometry() %>%
+  group_by(year, NTAName) %>%
+  rename(nta_name=NTAName)%>%
+  summarise(number_of_permits = n(), .groups = "drop")
+
+head(permits_summary)
+summary(permits_summary)
+str(permits_summary)
+
+```
+
+## Preprocessing
+
+```{r}
+
+si_sales_mapped <- si_sales_mapped %>%
+  drop_na()
+
+character_cols <- names(si_sales_mapped)[sapply(si_sales_mapped, is.character)]
+
+si_sales_mapped <- si_sales_mapped %>%
+  mutate(across(all_of(character_cols), as.factor))
+```
+
+
+
+```{r}
+
+
+si_sales_with_features <- si_sales_mapped %>%
+  left_join(crime_with_pop %>% select(nta_name, crime_rate_per_1000), by = "nta_name") %>%
+  left_join(avg_school_rankings_by_nta, by = "nta_name") %>%
+  left_join(permits_summary, by = c("nta_name", "year")) 
+
+si_sales_with_features$building_age <- si_sales_with_features$year - si_sales_with_features$year_built
+
+si_sales_with_features <- si_sales_with_features %>%
+  mutate(
+    land_square_feet_log = log1p(land_square_feet)
+  ) %>%
+  select(-neighborhood_upper) %>%
+  select(-land_square_feet)  
+
+si_sales_with_features <- si_sales_with_features %>%
+  left_join(si_population, by = "year")
+
+si_sales_with_features <- si_sales_with_features %>%
+  select(-si_population)
+  
+si_sales_with_features <- si_sales_with_features %>%
+  select(-year_built)
+
+si_sales_with_features <- si_sales_with_features %>%
+  select(-starts_with("zip_code"))
+character_cols <- names(si_sales_with_features)[sapply(si_sales_with_features, is.character)]
+
+cap_values <- quantile(si_sales_with_features$sale_price, c(0.01, 0.99))
+si_sales_with_features <- si_sales_with_features %>%
+  filter(sale_price >= cap_values[1], sale_price <= cap_values[2]) # removes only clearly bad records
+
+si_sales_with_features <- si_sales_with_features %>%
+  mutate(across(all_of(character_cols), as.factor))
+
+si_sales_with_features<-si_sales_with_features %>%
+  drop_na()
+
+head(si_sales_with_features)
+```
+
+```{r}
+
+
+num_data <- si_sales_with_features %>% 
+  select(where(is.numeric))
+
+
+cat("Number of numeric columns:", ncol(num_data), "\n")
+
+
+corr_matrix <- cor(num_data, use = "pairwise.complete.obs")
+
+max_cols <- min(10, ncol(corr_matrix))
+round(corr_matrix[1:max_cols, 1:max_cols], 2)
+
+## There’s no multicollinearity problem — all correlations are below ±0.9.
+
+
+```
+
+## Models
+
+```{r}
+set.seed(123)
+idx <- sample(seq_len(nrow(si_sales_with_features)), size = 0.8 * nrow(si_sales_with_features))
+train_data_wf <- si_sales_with_features[idx, ]
+test_data_wf  <- si_sales_with_features[-idx, ]
+
+# model matrices
+train_features_wf <- model.matrix(~ . - sale_price - 1, data = train_data_wf)
+test_features_wf  <- model.matrix(~ . - sale_price - 1, data = test_data_wf)
+
+train_target_wf <- train_data_wf$sale_price
+test_target_wf  <- test_data_wf$sale_price
+
+dtrain_wf <- xgb.DMatrix(data = as.matrix(train_features_wf), label = train_target_wf)
+dtest_wf  <- xgb.DMatrix(data = as.matrix(test_features_wf),  label = test_target_wf)
+
+```
+
+```{r}
+train_df <- data.frame(train_target_wf, train_features_wf)
+
+
+lm_model <- lm(train_target_wf ~ ., data = train_df)
+
+summary(lm_model)
+
+
+test_df <- data.frame(test_features_wf)
+
+
+predsln <- predict(lm_model, newdata = test_df)
+
+rmse_val_lin <- sqrt(mean((test_target_wf - predsln)^2))
+mae_val_lin  <- mean(abs(test_target_wf - predsln))
+r2_val_lin   <- 1 - sum((test_target_wf - predsln)^2) / sum((test_target_wf - mean(test_target_wf))^2)
+
+lr_model <- data.frame(
+  Model = "Linear_Regression",
+  RMSE = rmse_val_lin,
+  MAE  = mae_val_lin,
+  R2   = r2_val_lin
+)
+
+
+mean_price_lin <- mean(test_target_wf)
+
+# percentage error
+pct_error_lin <- (test_target_wf - predsln) / test_target_wf
+MAPE_lin <- mean(abs(pct_error_lin), na.rm = TRUE) * 100
+
+# normalized RMSE and MAE 
+RMSE_pct_lin <- rmse_val_lin / mean_price_lin
+MAE_pct_lin  <- mae_val_lin / mean_price_lin
+
+normalized_lin <- data.frame(
+  RMSE_as_pct_of_avg_price = RMSE_pct_lin,
+  MAE_as_pct_of_avg_price  = MAE_pct_lin,
+  MAPE_percent             = MAPE_lin
+)
+
+print(lr_model)
+print(normalized_lin)
+```
+
+```{r}
+
+params <- list(
+  objective = "reg:squarederror",
+  eta = 0.02,             
+  max_depth = 7,           
+  subsample = 0.9,
+  colsample_bytree = 0.85,
+  min_child_weight = 2,    
+  gamma = 0.1,
+  lambda = 1.2,
+  alpha = 0.2
+)
+
+model_wf <- xgb.train(
+  params = params,
+  data = dtrain_wf,
+  nrounds = 6000,
+  watchlist = list(train = dtrain_wf, test = dtest_wf),
+  early_stopping_rounds = 120,
+  print_every_n = 50,
+  verbose = 1
+)
+
+preds_wf <- predict(model_wf, newdata = test_features_wf)
+
+rmse_val_wf <- rmse(test_target_wf, preds_wf)
+mae_val_wf  <- mae(test_target_wf, preds_wf)
+r2_val_wf   <- 1 - sum((test_target_wf - preds_wf)^2) / sum((test_target_wf - mean(test_target_wf))^2)
+
+xgboost_metrics <- data.frame(
+  Model = "XGBoost",
+  RMSE = rmse_val_wf,
+  MAE  = mae_val_wf,
+  R2   = r2_val_wf
+)
+
+
+
+
+mean_price_xgb <- mean(test_target_wf)
+
+
+pct_error_xgb <- (test_target_wf - preds_wf) / test_target_wf
+MAPE_xgb <- mean(abs(pct_error_xgb), na.rm = TRUE) * 100
+
+
+RMSE_pct_xgb <- rmse_val_wf / mean_price_xgb
+MAE_pct_xgb  <- mae_val_wf / mean_price_xgb
+
+normalized_xgb <- data.frame(
+  RMSE_as_pct_of_avg_price = RMSE_pct_xgb,
+  MAE_as_pct_of_avg_price  = MAE_pct_xgb,
+  MAPE_percent             = MAPE_xgb
+)
+
+print(normalized_xgb)
+print(xgboost_metrics)
+```
+```{r}
+train_scaled <- scale(train_features_wf)
+test_scaled  <- scale(test_features_wf, center = attr(train_scaled, "scaled:center"),
+                                       scale  = attr(train_scaled, "scaled:scale"))
+
+train_scaled[is.na(train_scaled)] <- median(train_scaled, na.rm = TRUE)
+test_scaled[is.na(test_scaled)]   <- median(test_scaled, na.rm = TRUE)
+
+set.seed(123)
+preds_wf1 <- knn.reg(
+  train = train_scaled,
+  test  = test_scaled,
+  y     = train_target_wf,
+  k     = 20   
+)$pred
+
+
+rmse_val_knn <- sqrt(mean((test_target_wf - preds_wf1)^2))
+mae_val_knn <- mean(abs(test_target_wf - preds_wf1))
+r2_val_knn   <- 1 - sum((test_target_wf - preds_wf1)^2) /
+                     sum((test_target_wf - mean(test_target_wf))^2)
+
+
+knn_metrics <- data.frame(
+  Model = "kNN",
+  RMSE = rmse_val_knn,
+  MAE  = mae_val_knn,
+  R2   = r2_val_knn
+)
+
+print(knn_metrics)
+
+mean_price_knn <- mean(test_target_wf)
+
+pct_error_knn <- (test_target_wf - preds_wf1) / test_target_wf
+MAPE_knn <- mean(abs(pct_error_knn), na.rm = TRUE) * 100
+
+
+RMSE_pct_knn <- rmse_val_knn / mean_price_knn
+MAE_pct_knn  <- mae_val_knn / mean_price_knn
+
+normalized_knn <- data.frame(
+  RMSE_as_pct_of_avg_price = RMSE_pct_knn,
+  MAE_as_pct_of_avg_price  = MAE_pct_knn,
+  MAPE_percent             = MAPE_knn
+)
+
+print(normalized_knn)
+```
+```{r}
+
+
+metrics_table <- bind_rows(
+  lr_model,
+  knn_metrics,
+  xgboost_metrics
+)
+
+metrics_table %>%
+  kbl(
+    caption = "Table 2: Predictive Performance Metrics Across Models",
+    digits = 3,
+    align = "c",
+    booktabs = TRUE
+  ) %>%
+  kable_styling(
+    latex_options = c("striped", "hold_position"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(
+    which(metrics_table$Model == "XGBoost_with_features .2"),
+    bold = TRUE
+  )
+
+```
+
+```{r}
+normalized_all <- bind_rows(
+  cbind(Model = "Linear Regression", normalized_lin),
+  cbind(Model = "kNN Regression", normalized_knn),
+  cbind(Model = "XGBoost", normalized_xgb)
+)
+
+normalized_all %>%
+  kbl(
+    caption = "Table 3: Normalised Error Metrics Across Models",
+    digits = 3,
+    align = "c",
+    booktabs = TRUE
+  ) %>%
+  kable_styling(
+    latex_options = c("striped", "hold_position"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(
+    which(normalized_all$Model == "XGBoost"),
+    bold = TRUE
+  )
+
+
+```
+
+```{r}
+residuals_df <- bind_rows(
+  data.frame(
+    Model = "Linear Regression",
+    Actual = test_target_wf,
+    Predicted = predsln,
+    Residual = test_target_wf - predsln,
+    Index = seq_along(test_target_wf)
+  ),
+  data.frame(
+    Model = "kNN",
+    Actual = test_target_wf,
+    Predicted = preds_wf1,
+    Residual = test_target_wf - preds_wf1,
+    Index = seq_along(test_target_wf)
+  ),
+  data.frame(
+    Model = "XGBoost",
+    Actual = test_target_wf,
+    Predicted = preds_wf,
+    Residual = test_target_wf - preds_wf,
+    Index = seq_along(test_target_wf)
+  )
+)
+
+```
+
+## Residuals vs Fitted
+
+```{r}
+ggplot(residuals_df, aes(x = Predicted, y = Residual)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~Model, scales = "free") +
+  labs(
+    title = "Residuals vs Fitted Values",
+    x = "Predicted Sale Price",
+    y = "Residuals"
+  ) +
+  theme_minimal()
+
+
+```
+
+## Histogram of Residuals
+
+```{r}
+ggplot(residuals_df, aes(x = Residual)) +
+  geom_histogram(bins = 40, alpha = 0.7) +
+  facet_wrap(~Model, scales = "free") +
+  labs(
+    title = "Distribution of Residuals",
+    x = "Residual",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+
+
+```
+
+## Q–Q Plot of Residuals
+
+```{r}
+
+ggplot(residuals_df, aes(sample = Residual)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~Model, scales = "free") +
+  labs(
+    title = "Q–Q Plots of Residuals",
+    x = "Theoretical Quantiles",
+    y = "Sample Quantiles"
+  ) +
+  theme_minimal()
+
+```
+
+## Actual vs Predicted
+
+```{r}
+ggplot(residuals_df, aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  facet_wrap(~Model, scales = "free") +
+  labs(
+    title = "Actual vs Predicted Sale Prices",
+    x = "Actual Sale Price",
+    y = "Predicted Sale Price"
+  ) +
+  theme_minimal()
+
+```
+
+## Pilot plan:Forecasting 
+
+```{r}
+si_sales_with_features_econ <- si_sales_with_features %>%
+  left_join(economic_factors, by = "year")
+
+set.seed(123)
+idx <- sample(seq_len(nrow(si_sales_with_features_econ)), size = 0.8 * nrow(si_sales_with_features_econ))
+train_data_wf <- si_sales_with_features_econ[idx, ]
+test_data_wf  <- si_sales_with_features_econ[-idx, ]
+
+
+train_features_wf <- model.matrix(~ . - sale_price - 1, data = train_data_wf)
+test_features_wf  <- model.matrix(~ . - sale_price - 1, data = test_data_wf)
+
+train_target_wf <- train_data_wf$sale_price
+test_target_wf  <- test_data_wf$sale_price
+
+dtrain_wf <- xgb.DMatrix(data = as.matrix(train_features_wf), label = train_target_wf)
+dtest_wf  <- xgb.DMatrix(data = as.matrix(test_features_wf),  label = test_target_wf)
+
+
+params <- list(
+  objective = "reg:squarederror",
+  eta = 0.02,             
+  max_depth = 7,           
+  subsample = 0.9,
+  colsample_bytree = 0.85,
+  min_child_weight = 2,    
+  gamma = 0.1,
+  lambda = 1.2,
+  alpha = 0.2
+)
+
+model_econ <- xgb.train(
+  params = params,
+  data = dtrain_wf,
+  nrounds = 6000,
+  watchlist = list(train = dtrain_wf, test = dtest_wf),
+  early_stopping_rounds = 120,
+  print_every_n = 50,
+  verbose = 1
+)
+
+preds_wf <- predict(model_econ, newdata = test_features_wf)
+
+rmse_val_wf <- rmse(test_target_wf, preds_wf)
+mae_val_wf  <- mae(test_target_wf, preds_wf)
+r2_val_wf   <- 1 - sum((test_target_wf - preds_wf)^2) / sum((test_target_wf - mean(test_target_wf))^2)
+
+econ <- data.frame(
+  Model = "XGBoost_with_features_Econ",
+  RMSE = rmse_val_wf,
+  MAE  = mae_val_wf,
+  R2   = r2_val_wf
+)
+
+print(econ)
+
+```
+
+
+## Importance 
+```{r}
+
+importance_df <- xgb.importance(
+  feature_names = model_econ$feature_names,
+  model = model_econ
+)
+
+
+importance_df_clean <- importance_df %>%
+  select(Feature, Gain, Cover, Frequency) %>%
+  arrange(desc(Gain)) %>%
+  mutate(
+    Rank = row_number(),
+    Gain_Percent = round(100 * Gain / sum(Gain), 2)
+  )
+
+#  top drivers
+head(importance_df_clean, 15)
+
+
+```
+
+```{r}
+importance_top15 <- importance_df_clean[1:15, ]
+ggplot(
+  importance_top15,
+  aes(x = reorder(Feature, Gain_Percent), y = Gain_Percent)
+) +
+  geom_col(
+    fill = "#1a9850",   
+    width = 0.75
+  ) +
+  coord_flip() +
+  labs(
+    title = "Top 15 Feature Importances",
+    subtitle = "Gain-based relative contribution to predictive accuracy",
+    x = "Feature",
+    y = "Relative Importance (%)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.title.x = element_text(face = "bold", size = 13),
+    axis.title.y = element_text(face = "bold", size = 13),
+    axis.text = element_text(size = 11),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(15, 20, 15, 20)
+  )
+
+
+ggsave(
+  filename = "Figure_5_5_Feature_Importance_XGBoost_Thesis.png",
+  width = 10,
+  height = 7,
+  dpi = 300,
+  bg = "white"
+)
+```
+```{r}
+crime_school_importance <- importance_df_clean %>%
+  filter(grepl("crime|school|education", Feature, ignore.case = TRUE))
+
+crime_school_importance
+
+
+kable(
+  crime_school_importance,
+  caption = "Importance of Crime and School Quality Variables",
+  align = "c"
+) %>%
+  kable_styling(full_width = FALSE)
+
+
+
+```
+
+```{r}
+## Now its time to  prepare the data we’ll feed into the prediction model
+feature_template <- si_sales_with_features %>%
+  select(-sale_price)
+
+
+future_features <- feature_template %>%
+  filter(year == 2025) %>%          
+  select(-year) %>%
+  distinct() %>%
+  crossing(year = 2026:2030)  
+```
+
+
+
+```{r}
+
+# Blueprint: 2017-2021 historical data 
+blueprint <- economic_factors %>%
+  filter(year >= 2017 & year <= 2021) %>%
+  select(year, avg_mortgage_rate, all_items_annual_avg_cpi)
+
+# Calculate year-to-year percentage changes 
+blueprint_trends <- blueprint %>%
+  arrange(year) %>%
+  mutate(
+    cpi_change = c(0, diff(all_items_annual_avg_cpi) / head(all_items_annual_avg_cpi, -1)),
+    avg_mortgage_rate_change = c(0, diff(avg_mortgage_rate) / head(avg_mortgage_rate, -1))
+  )
+
+#  Compute average annual changes 
+avg_changes <- blueprint_trends %>%
+  summarise(
+    mortgage_rate_change = mean(avg_mortgage_rate_change[-1], na.rm = TRUE),
+    cpi_change = mean(cpi_change[-1], na.rm = TRUE)
+  )
+# These averages will help us project the future.
+```
+
+```{r}
+latest_values <- tail(economic_factors, 1) %>%
+  select(avg_mortgage_rate, all_items_annual_avg_cpi)
+
+# Project future years (CPI relative to 2017 = 100) 
+future_years <- data.frame(year = 2026:2030)
+
+
+future_years$avg_mortgage_rate[1] <- latest_values$avg_mortgage_rate * (1 + avg_changes$mortgage_rate_change)
+future_years$all_items_annual_avg_cpi[1] <- latest_values$all_items_annual_avg_cpi * (1 + avg_changes$cpi_change)
+
+
+for (i in 2:nrow(future_years)) {
+  future_years$avg_mortgage_rate[i] <- future_years$avg_mortgage_rate[i-1] * (1 + avg_changes$mortgage_rate_change)
+  future_years$all_items_annual_avg_cpi[i] <- future_years$all_items_annual_avg_cpi[i-1] * (1 + avg_changes$cpi_change)
+}
+
+econ_full <- bind_rows(blueprint, future_years)
+
+
+feature_template <- si_sales_with_features %>% select(-sale_price)
+
+future_features <- feature_template %>%
+  filter(year == 2025) %>%    
+  select(-year) %>%
+  distinct() %>%
+  crossing(year = 2026:2030) %>%
+  left_join(future_years, by = "year")
+
+
+```
+
+```{r}
+econ_full <- bind_rows(blueprint, future_years)
+
+
+feature_template <- si_sales_with_features %>%
+  select(-sale_price)
+
+future_features <- feature_template %>%
+  filter(year == 2025) %>%
+  select(-year) %>%
+  distinct() %>%
+  crossing(year = 2026:2030)
+
+future_features <- future_features %>%
+  left_join(future_years, by = "year")
+view(future_features)
+```
+
+```{r}
+
+model_features <- model_econ$feature_names
+
+future_features_matrix <- model.matrix(~ . - 1, data = future_features)
+
+
+extra_cols <- setdiff(colnames(future_features_matrix), model_features)
+if (length(extra_cols) > 0) {
+  future_features_matrix <- future_features_matrix[, !(colnames(future_features_matrix) %in% extra_cols), drop = FALSE]
+}
+
+
+missing_cols <- setdiff(model_features, colnames(future_features_matrix))
+for (col in missing_cols) {
+  future_features_matrix <- cbind(future_features_matrix, setNames(data.frame(0), col))
+}
+
+future_features_matrix <- future_features_matrix[, model_features, drop = FALSE]
+
+future_matrix_clean <- as.matrix(future_features_matrix)
+
+predictions <- predict(model_econ, newdata = future_matrix_clean)
+future_forecast <- future_features %>%
+  mutate(predicted_sale_price = predictions)
+
+
+future_forecast_summary_nta <- future_forecast %>%
+  group_by(year, nta_name) %>%
+  summarise(mean_price = mean(predicted_sale_price, na.rm = TRUE)) %>%
+  arrange(nta_name, year)
+
+future_forecast_summary_neighborhood <- future_forecast %>%
+  group_by(year, neighborhood) %>%
+  summarise(mean_price = mean(predicted_sale_price, na.rm = TRUE)) %>%
+  arrange(neighborhood, year)
+
+future_forecast_summary_nta
+future_forecast_summary_neighborhood
+```
+
+
+## NTA Increase %
+```{r}
+nta_baseline_2025 <- si_sales_with_features_econ %>%
+  filter(year == 2025) %>%
+  group_by(nta_name) %>%
+  summarise(
+    baseline_price_2025 = mean(sale_price, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+nta_forecast_with_baseline <- future_forecast_summary_nta %>%
+  left_join(nta_baseline_2025, by = "nta_name") %>%
+  mutate(
+    pct_change_from_2025 =
+      (mean_price - baseline_price_2025) / baseline_price_2025 * 100
+  )
+
+nta_growth_2030 <- nta_forecast_with_baseline %>%
+  filter(year == 2030) %>%
+  select(nta_name, pct_change_from_2025)
+
+
+
+nta_growth_bands <- nta_growth_2030 %>%
+  mutate(
+    trajectory_band = case_when(
+      pct_change_from_2025 >= quantile(pct_change_from_2025, 0.75, na.rm = TRUE) ~
+        "High Relative Growth",
+      pct_change_from_2025 >= quantile(pct_change_from_2025, 0.50, na.rm = TRUE) ~
+        "Moderate Growth",
+      pct_change_from_2025 >= quantile(pct_change_from_2025, 0.25, na.rm = TRUE) ~
+        "Low Growth",
+      TRUE ~
+        "Relative Deceleration"
+    )
+  )
+
+nta_positive_growth <- nta_growth_2030 %>%
+  filter(pct_change_from_2025 > 0) %>%
+  arrange(desc(pct_change_from_2025))
+
+
+
+```
+
+
+```{r}
+
+ggplot(
+  nta_positive_growth,
+  aes(
+    x = reorder(nta_name, pct_change_from_2025),
+    y = pct_change_from_2025
+  )
+) +
+  geom_col(width = 0.7) +
+  coord_flip() +
+  labs(
+    title = "NTAs with Forecasted Positive Relative Price Growth (2025–2030)",
+    subtitle = "Percentage increase relative to observed 2025 prices",
+    x = "Neighborhood Tabulation Area (NTA)",
+    y = "Percent Change from 2025"
+  ) +
+  theme_minimal(base_size = 12)
+
+ggsave(
+    filename = "nta_groeth.png",
+    width = 10,
+    height = 6,
+    units = "in",
+    dpi = 300
+)
+```
+
+```{r}
+hist_units <- si_sales_with_features %>%
+  filter(residential_units %in% c(1, 2)) %>%   
+  group_by(year, neighborhood, residential_units) %>%
+  summarise(
+    mean_price = mean(sale_price, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(source = "Observed")
+
+
+future_units <- future_forecast %>%
+  filter(residential_units %in% c(1, 2)) %>%   
+  group_by(year, neighborhood, residential_units) %>%
+  summarise(
+    mean_price = mean(predicted_sale_price, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(source = "Forecast")
+
+
+units_panel <- bind_rows(hist_units, future_units) %>%
+  filter(!is.na(neighborhood)) %>%
+  mutate(
+    unit_group = ifelse(residential_units == 1,
+                        "1 unit (single-family)",
+                        "2 units")
+  )
+
+set.seed(261)
+
+random_neighborhoods <- units_panel %>%
+  distinct(neighborhood) %>%
+  slice_sample(n = 6) %>%  
+  pull(neighborhood)
+
+random_neighborhoods
+
+```
+```{r}
+set.seed(261) 
+neighborhood_units_trends <- units_panel %>%
+  filter(neighborhood %in% random_neighborhoods)
+
+
+combined_plot <- ggplot(
+  neighborhood_units_trends,
+  aes(x = year,
+      y = mean_price,
+      color = unit_group,
+      group = interaction(unit_group, neighborhood))
+) +
+  geom_line(size = 1.1) +   
+  facet_wrap(~ neighborhood, scales = "free_y") +
+  
+  scale_y_continuous(labels = scales::dollar_format()) +
+  
+  scale_color_manual(
+    name = "Home Type",
+    values = c(
+      "1 unit (single-family)" = "#1B9E77",  
+      "2 units"                = "#D95F02"    
+    )
+  ) +
+  
+  labs(
+    title = "Observed and Forecasted Price Trends for 1-Unit and 2-Unit Homes",
+    subtitle = "Observed: 2017–2025   |   Forecast: 2026–2030",
+    x = "Year",
+    y = "Average Sale Price"
+  ) +
+  
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 15),
+    plot.subtitle = element_text(hjust = 0.5, size = 11),
+    strip.text = element_text(face = "bold"),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.spacing = unit(1, "lines")
+  )
+combined_plot 
+```
+
+```{r}
+
+## Idea-Experimenting 
+# Average house prices per year per NTA
+avg_price_per_nta <- si_sales_with_features %>%
+  group_by(year, nta_name) %>%
+  summarise(
+    mean_price = mean(sale_price, na.rm = TRUE),
+    n_sales = n(),
+    .groups = "drop"
+  )
+
+# Average house prices per year per Neighborhood
+avg_price_per_neighborhood <- si_sales_with_features %>%
+  group_by(year, neighborhood) %>%
+  summarise(
+    mean_price = mean(sale_price, na.rm = TRUE),
+    n_sales = n(),
+    .groups = "drop"
+  )
+
+combined_nta <- bind_rows(future_forecast_summary_nta, avg_price_per_nta) %>%
+  arrange(nta_name, year, mean_price)%>%
+  select(-n_sales)
+
+combined_neighborhood <- bind_rows(future_forecast_summary_neighborhood, avg_price_per_neighborhood) %>%
+  arrange(neighborhood, year, mean_price)%>%
+  select(-n_sales)
+```
+
+```{r}
+trend_table_simple <- neighborhood_units_trends %>%
+  filter(year >= 2025) %>%                       # keep only 2025+
+  arrange(neighborhood, unit_group, year) %>%
+  mutate(mean_price = round(mean_price, 0)) %>%
+  select(neighborhood, year, unit_group, mean_price) %>%
+  tidyr::pivot_wider(
+    names_from = unit_group,
+    values_from = mean_price
+  ) %>%
+  arrange(neighborhood, year)
+
+trend_table_simple
+```
+```{r}
+nta_map <- st_read("nynta2020_25c/nynta2020.shp")
+
+si_map <- nta_map %>%
+  filter(BoroName == "Staten Island") %>%
+  mutate(
+    NTAName = if_else(NTAName == "Snug Harbor", "St. George-New Brighton", NTAName),
+    NTAName = if_else(NTAName == "Great Kills Park", "Great Kills-Eltingville", NTAName),
+    NTAName = if_else(NTAName == "Miller Field", "New Dorp-Midland Beach", NTAName)
+  )
+
+
+nta_shapes <- si_map %>%
+  select(nta_name = NTAName, geometry)
+
+nta_map <- st_read("nynta2020_25c/nynta2020.shp")
+
+si_map <- nta_map %>%
+  filter(BoroName == "Staten Island") %>%
+  mutate(
+    NTAName = if_else(NTAName == "Snug Harbor", "St. George-New Brighton", NTAName),
+    NTAName = if_else(NTAName == "Great Kills Park", "Great Kills-Eltingville", NTAName),
+    NTAName = if_else(NTAName == "Miller Field", "New Dorp-Midland Beach", NTAName)
+  )
+
+nta_shapes <- si_map %>%
+  select(nta_name = NTAName, geometry)
+
+schools_coords <- nta_shapes %>%
+  st_centroid() %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  bind_cols(nta_shapes %>% st_drop_geometry()) %>%
+  rename(lon = X, lat = Y)
+
+schools <- schools %>%
+  as.data.frame()
+    
+schools_mapped <- schools %>%
+  mutate(
+    lon = schools_coords$lon[match(nta_name, schools_coords$nta_name)],
+    lat = schools_coords$lat[match(nta_name, schools_coords$nta_name)]
+  )
+
+schools_by_nta <- schools_mapped %>%
+  filter(!is.na(nta_name)) %>%
+  group_by(nta_name) %>%
+  summarise(
+    total_schools   = n(),
+    avg_school_rank = round(mean(Ranking, na.rm = TRUE), 1),
+    top_school      = avg_school_rank > 8,   
+    .groups = "drop"
+  )
+
+nta_across_nj <- c(
+  "Tottenville-Charleston",
+  "New Springville-Willowbrook-Bulls Head-Travis",
+  "Mariner's Harbor-Arlington-Graniteville",
+  "Port Richmond",
+  "West New Brighton-Silver Lake-Grymes Hill",
+  "St. George-New Brighton"
+)
+
+nta_across_brooklyn <- c(
+  "Tompkinsville-Stapleton-Clifton-Fox Hills",
+  "Rosebank-Shore Acres-Park Hill",
+  "Grasmere-Arrochar-South Beach-Dongan Hills"
+)
+
+nta_near_nj <- data.frame(
+  nta_name = nta_across_nj,
+  near_nj = TRUE
+)
+nta_near_brooklyn <- data.frame(
+  nta_name = nta_across_brooklyn,
+  near_brooklyn = TRUE
+)
+nta_with_train <- c(
+  "St. George-New Brighton",
+  "Tompkinsville-Stapleton-Clifton-Fox Hills",
+  "Rosebank-Shore Acres-Park Hill",
+  "Grasmere-Arrochar-South Beach-Dongan Hills",
+  "New Dorp-Midland Beach",
+  "Oakwood-Richmondtown",
+  "Great Kills-Eltingville",
+  "Annadale-Huguenot-Prince's Bay-Woodrow",
+  "Tottenville-Charleston"
+)
+
+nta_train_access <- data.frame(
+  nta_name = nta_with_train,
+  train_access = TRUE
+)
+
+combined_nta <- combined_nta %>%
+  ungroup() %>%
+  dplyr::mutate(
+    near_nj = FALSE,
+    near_brooklyn = FALSE,
+    train_access = FALSE
+  )
+combined_nta <- combined_nta %>%
+  left_join(nta_near_nj, by = "nta_name", suffix = c("", "_new")) %>%
+  left_join(nta_near_brooklyn, by = "nta_name", suffix = c("", "_new")) %>%
+  left_join(nta_train_access, by = "nta_name", suffix = c("", "_new")) %>%
+  mutate(
+    near_nj = if_else(!is.na(near_nj_new), TRUE, near_nj),
+    near_brooklyn = if_else(!is.na(near_brooklyn_new), TRUE, near_brooklyn),
+    train_access = if_else(!is.na(train_access_new), TRUE, train_access)
+  ) %>%
+  select(-ends_with("_new"))
+
+avg_house_age_by_nta <- si_sales_mapped %>%
+  filter(!is.na(year_built)) %>%
+  mutate(house_age = 2026 - year_built) %>%   
+  group_by(nta_name) %>%
+  summarise(
+    avg_house_age = round(mean(house_age, na.rm = TRUE), 1),
+    .groups = "drop"
+  )
+
+combined_nta <- combined_nta %>%
+  left_join(avg_house_age_by_nta, by = "nta_name")
+
+
+combined_nta <- combined_nta %>%
+  left_join(schools_by_nta, by = "nta_name") 
+
+
+
+price_stats_2025 <- avg_price_per_nta %>%
+  filter(year == 2025) %>%
+  summarise(
+    min_price    = min(mean_price, na.rm = TRUE),
+    q1_price     = quantile(mean_price, 0.25, na.rm = TRUE),
+    median_price = median(mean_price, na.rm = TRUE),
+    q3_price     = quantile(mean_price, 0.75, na.rm = TRUE),
+    max_price    = max(mean_price, na.rm = TRUE)
+  )
+
+price_stats_2025
+
+
+```
+
+
+
+
+## Final App
+```{r}
+ui <- fluidPage(
+  
+  titlePanel("Staten Island Housing Price Dashboard"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      
+      radioButtons(
+        "mode",
+        "What would you like to do?",
+        choices = c(
+          "📝 Take the NTA Preference Quiz" = "quiz",
+          "📊 View All NTAs (Forecasted Prices)" = "all"
+        ),
+        selected = "quiz"
+      ),
+      
+      conditionalPanel(
+        condition = "input.mode == 'quiz'",
+        
+        hr(),
+        h4("💸 Budget (Forecasted)"),
+        radioButtons(
+          "budget", NULL,
+          choices = c(
+            "Lower-Priced: Under $650K" = "low",
+            "Mid-Priced: $650K – $835K" = "mid",
+            "Upper-Priced: Over $835K" = "high",
+            "I don't have a budget" = "none"
+          ),
+          selected = "none"
+        ),
+        
+        hr(),
+        h4("🥇 Interested in Top-Ranked Schools?"),
+        radioButtons(
+          "schools", NULL,
+          choices = c("Yes" = "yes", "No" = "no", "I don't care" = "na"),
+          selected = "na"
+        ),
+        
+        hr(),
+        h4("🏠 Home Style Preference"),
+        radioButtons(
+          "house_age_pref", NULL,
+          choices = c(
+            "More modern neighborhoods (mostly built after 1970)" = "new",
+            "More historic neighborhoods (mostly built before 1970)" = "old",
+            "I don't have a preference" = "na"
+          ),
+          selected = "na"
+        ),
+        
+        hr(),
+        h4("🌇 Preferred Location"),
+        radioButtons(
+          "location", NULL,
+          choices = c(
+            "Across from New Jersey" = "nj",
+            "Across from Brooklyn" = "bk",
+            "I don't mind" = "na"
+          ),
+          selected = "na"
+        ),
+        
+        hr(),
+        h4("🚂 Train Access"),
+        radioButtons(
+          "train", NULL,
+          choices = c("Yes" = "yes", "No" = "no", "I don't care" = "na"),
+          selected = "na"
+        ),
+        
+        hr(),
+        actionButton("run_quiz", "🔍 Show My NTA Matches", class = "btn-primary")
+      ),
+      
+      hr(),
+      selectInput(
+        "neighborhood",
+        "Select Neighborhood (Tab 2):",
+        choices = sort(unique(combined_neighborhood$neighborhood))
+      )
+    ),
+    
+    mainPanel(
+      tabsetPanel(
+        
+        tabPanel(
+          "NTA Finder",
+          DTOutput("quiz_results"),
+          hr(),
+          h4(textOutput("nta_detail_title")),
+          plotlyOutput("nta_detail_trend", height = "350px"),
+          DTOutput("nta_detail_table")
+        ),
+        
+        tabPanel(
+          "🏘️ Neighborhood Price Trends",
+          plotlyOutput("price_trend_plot", height = "400px"),
+          DTOutput("price_table")
+        )
+      )
+    )
+  )
+)
+
+
+server <- function(input, output, session) {
+  
+  forecast_year <- 2027
+  
+
+  quiz_filtered <- eventReactive(input$run_quiz, {
+    
+    df <- combined_nta %>% filter(year == forecast_year)
+    
+    # Budget
+    if (input$budget == "low")
+      df <- df %>% filter(mean_price < 650000)
+    if (input$budget == "mid")
+      df <- df %>% filter(mean_price >= 650000 & mean_price <= 835000)
+    if (input$budget == "high")
+      df <- df %>% filter(mean_price > 835000)
+    
+    # Schools
+    if ("top_school" %in% colnames(df)) {
+      if (input$schools == "yes") df <- df %>% filter(top_school)
+      if (input$schools == "no")  df <- df %>% filter(!top_school)
+    }
+    
+    # House Age
+    if ("avg_house_age" %in% colnames(df)) {
+      if (input$house_age_pref == "new") df <- df %>% filter(avg_house_age < 55)
+      if (input$house_age_pref == "old") df <- df %>% filter(avg_house_age >= 55)
+    }
+    
+    # Location
+    if (input$location == "nj") df <- df %>% filter(near_nj)
+    if (input$location == "bk") df <- df %>% filter(near_brooklyn)
+    
+    # Train
+    if (input$train == "yes") df <- df %>% filter(train_access)
+    if (input$train == "no")  df <- df %>% filter(!train_access)
+    
+    df
+  })
+  
+
+  output$quiz_results <- renderDT({
+    
+    req(input$run_quiz)  
+    
+    df <- quiz_filtered()
+    
+    if (nrow(df) == 0) {
+      return(datatable(
+        data.frame(Message = "❌ No NTAs matched your preferences."),
+        options = list(dom = "t")
+      ))
+    }
+    
+    df %>%
+      mutate(`Forecasted Avg Price` = dollar(round(mean_price))) %>%
+      select(NTA = nta_name, `Forecasted Avg Price`) %>%
+      datatable(selection = "single", options = list(pageLength = 10))
+  })
+  
+
+  selected_nta <- reactive({
+    s <- input$quiz_results_rows_selected
+    req(s)
+    quiz_filtered()$nta_name[s]
+  })
+  
+  output$nta_detail_title <- renderText({
+    req(selected_nta())
+    paste("📈 Price History for:", selected_nta())
+  })
+  
+  output$nta_detail_trend <- renderPlotly({
+    req(selected_nta())
+    
+    df <- combined_nta %>% filter(nta_name == selected_nta())
+    
+    plot_ly(
+      df, x = ~year, y = ~mean_price,
+      type = "scatter", mode = "lines+markers"
+    )
+  })
+  
+  output$nta_detail_table <- renderDT({
+    req(selected_nta())
+    
+    combined_nta %>%
+      filter(nta_name == selected_nta()) %>%
+      arrange(year) %>%
+      mutate(mean_price = dollar(round(mean_price))) %>%
+      datatable(options = list(pageLength = 10))
+  })
+
+  output$price_trend_plot <- renderPlotly({
+    
+    df <- combined_neighborhood %>%
+      filter(neighborhood == input$neighborhood)
+    
+    plot_ly(df, x = ~year, y = ~mean_price,
+            type = "scatter", mode = "markers")
+  })
+  
+  output$price_table <- renderDT({
+    
+    combined_neighborhood %>%
+      filter(neighborhood == input$neighborhood) %>%
+      datatable(options = list(pageLength = 10))
+  })
+  
+}
+
+shinyApp(ui, server)
+
+
+```
