@@ -43,6 +43,15 @@ XGBoost)
 
 Running this file from top to bottom reproduces the analytical results discussed in the paper.
 
+## 🌐 RPubs 
+
+A fully rendered, public version of the code is also available on RPubs:
+
+🔗 RPubs Link:
+https://rpubs.com/NikoletaEm/1380820
+
+This version allows reviewers to view the analysis, figures and narrative without running the code locally.
+
 ## 🔁 Reproducibility Notes
 
 All data sources used in the analysis are either:
