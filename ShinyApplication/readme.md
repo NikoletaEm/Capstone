@@ -5,7 +5,7 @@ This folder contains the R Shiny application developed as part of the capstone p
 
 The application provides an interactive interface for exploring forecasted housing prices across Staten Island at both the Neighborhood Tabulation Area (NTA) and neighborhood levels. Users can view borough-wide forecasts, explore price trends, and interact with a personalized NTA preference quiz.
 
-## File Descriptions
+## 📁 File Descriptions
 
 app.R
 
@@ -33,17 +33,17 @@ Steps:
 
 2.Ensure the following files are present in the same directory:
 
-app.R
+-  app.R
 
-combined_nta.rds
+-  combined_nta.rds
 
-combined_neighborhood.rds
+-  combined_neighborhood.rds
 
-schools_mapped.rds
+-  schools_mapped.rds
 
 3.Open app.R in RStudio.
 
-Click Run App.
+4.Click Run App.
 
 The application reads the .rds files directly from the local folder. If any file is missing or renamed, the app will not launch correctly.
 
