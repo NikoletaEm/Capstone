@@ -12,11 +12,11 @@ If Manhattan gets the headlines and Brooklyn gets the hype, this project asks:
 
 -  Builds and compares three predictive models:
 
-1.Linear Regression
+1  Linear Regression
 
-2.k-Nearest Neighbors (kNN)
+2  k-Nearest Neighbors (kNN)
 
-3.XGBoost (final model)
+3  XGBoost (final model)
 
 -  Forecasts housing prices from 2026–2030 under a historically grounded macroeconomic scenario
 
